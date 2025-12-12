@@ -1,6 +1,23 @@
+/**
+ * @fileoverview Templates for AI prompts used in meeting summarization
+ * @module utils/prompt-templates
+ */
+
 import { MeetingData } from '../types/meeting.types';
 
+/**
+ * Utility class for generating AI prompts
+ * Contains template methods for creating structured prompts for Claude AI
+ * @class PromptTemplates
+ */
 export class PromptTemplates {
+  /**
+   * Generates a comprehensive prompt for meeting summary generation
+   * Creates a detailed prompt with meeting context and JSON schema requirements
+   * @param {MeetingData} data - Complete meeting data including transcriptions and messages
+   * @returns {string} Formatted prompt for Claude API
+   * @static
+   */
   static generateSummaryPrompt(data: MeetingData): string {
     const participantsList = data.participants
       .map(p => `- ${p.name}`)
@@ -75,18 +92,26 @@ REGLAS IMPORTANTES:
 Responde ahora con el JSON:`;
   }
 
+  /**
+   * Calculates human-readable meeting duration
+   * @param {string} startTime - ISO timestamp of meeting start
+   * @param {string} [endTime] - ISO timestamp of meeting end
+   * @returns {string} Formatted duration string (e.g., "45 minutos", "1h 30min")
+   * @private
+   * @static
+   */
   private static calculateDuration(startTime: string, endTime?: string): string {
     if (!endTime) return 'En curso';
-    
+
     const start = new Date(startTime);
     const end = new Date(endTime);
     const diffMs = end.getTime() - start.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
+
     if (diffMins < 60) {
       return `${diffMins} minutos`;
     }
-    
+
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
     return `${hours}h ${mins}min`;

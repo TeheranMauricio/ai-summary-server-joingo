@@ -1,3 +1,18 @@
+/**
+ * @fileoverview Main server file for JoinGo AI Summary Server
+ * Handles WebSocket connections via Socket.IO, REST API endpoints, and meeting data processing
+ *
+ * This server provides:
+ * - Real-time audio transcription using OpenAI Whisper
+ * - AI-powered meeting summaries using Anthropic Claude
+ * - Email distribution of summaries
+ * - WebSocket event handling for meeting lifecycle
+ * - REST API for meeting data retrieval
+ *
+ * @module server
+ * @author DVVID-G
+ */
+
 import express from 'express';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
@@ -19,10 +34,10 @@ import {
   JoinMeetingData
 } from './types/socket.types';
 
-// Validar configuración al inicio
+// Validate configuration on startup
 validateConfig();
 
-// Inicializar Express
+// Initialize Express application
 const app = express();
 app.use(cors({
   origin: config.cors.origins,
@@ -30,20 +45,20 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Crear servidor HTTP
+// Create HTTP server
 const httpServer = createServer(app);
 
-// Configurar Socket.IO
+// Configure Socket.IO with CORS and buffer size limits
 const io = new Server(httpServer, {
   cors: {
     origin: config.cors.origins,
     methods: ['GET', 'POST'],
     credentials: true
   },
-  maxHttpBufferSize: 10e6 // 10MB para audio chunks
+  maxHttpBufferSize: 10e6 // 10MB for audio chunks
 });
 
-// Inicializar servicios
+// Initialize all services
 const storageService = new StorageService();
 const transcriptionService = new TranscriptionService();
 const summarizerService = new SummarizerService();

@@ -1,12 +1,26 @@
+/**
+ * @fileoverview Service for generating AI-powered meeting summaries using Claude
+ * @module services/summarizer
+ */
+
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../config';
 import { Logger } from '../utils/logger';
 import { PromptTemplates } from '../utils/prompt-templates';
 import { MeetingData, Summary } from '../types/meeting.types';
 
+/**
+ * Service for generating meeting summaries using Anthropic's Claude AI
+ * @class SummarizerService
+ */
 export class SummarizerService {
+  /** Anthropic client instance */
   private anthropic: Anthropic;
 
+  /**
+   * Creates an instance of SummarizerService
+   * Initializes Anthropic client with API credentials
+   */
   constructor() {
     this.anthropic = new Anthropic({
       apiKey: config.anthropic.apiKey
@@ -14,16 +28,20 @@ export class SummarizerService {
   }
 
   /**
-   * Genera un resumen completo de la reunión usando Claude
+   * Generates a complete meeting summary using Claude AI
+   * Creates a structured summary with topics, tasks, and next steps
+   * @param {MeetingData} meetingData - Complete meeting data including transcriptions and messages
+   * @returns {Promise<Summary>} AI-generated structured summary
+   * @throws {Error} If summary generation fails
    */
   async generateSummary(meetingData: MeetingData): Promise<Summary> {
     try {
       Logger.info(`Generating summary for meeting: ${meetingData.meetingId}`);
-      
-      // Construir el prompt
+
+      // Build the prompt
       const prompt = PromptTemplates.generateSummaryPrompt(meetingData);
-      
-      // Llamar a Claude API
+
+      // Call Claude API
       const response = await this.anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4000,
@@ -34,7 +52,7 @@ export class SummarizerService {
         }]
       });
 
-      // Extraer el texto de la respuesta
+      // Extract text from response
       const responseText = response.content
         .filter(block => block.type === 'text')
         .map(block => block.type === 'text' ? block.text : '')
@@ -42,11 +60,11 @@ export class SummarizerService {
 
       Logger.debug(`Claude response: ${responseText.substring(0, 100)}...`);
 
-      // Parsear el JSON
+      // Parse the JSON response
       const summary = this.parseClaudeResponse(responseText, meetingData);
-      
+
       Logger.success(`Summary generated successfully for ${meetingData.meetingId}`);
-      
+
       return summary;
     } catch (error: any) {
       Logger.error('Summary generation failed', error);
@@ -55,25 +73,30 @@ export class SummarizerService {
   }
 
   /**
-   * Parsea la respuesta de Claude y crea el objeto Summary
+   * Parses Claude's response and creates a Summary object
+   * Handles JSON extraction and provides fallback if parsing fails
+   * @param {string} responseText - Raw response text from Claude
+   * @param {MeetingData} meetingData - Original meeting data for fallback
+   * @returns {Summary} Parsed summary object
+   * @private
    */
   private parseClaudeResponse(responseText: string, meetingData: MeetingData): Summary {
     try {
-      // Limpiar la respuesta (remover posibles markdown code blocks)
+      // Clean the response (remove possible markdown code blocks)
       let cleanedText = responseText.trim();
-      
-      // Remover ```json y ``` si existen
+
+      // Remove ```json and ``` if they exist
       cleanedText = cleanedText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-      
-      // Intentar parsear el JSON
+
+      // Attempt to parse JSON
       const parsed = JSON.parse(cleanedText);
-      
-      // Calcular duración
+
+      // Calculate duration
       const duration = this.calculateDuration(
-        meetingData.startTime, 
+        meetingData.startTime,
         meetingData.endTime
       );
-      
+
       return {
         summary: parsed.summary || 'No se pudo generar un resumen.',
         participants: parsed.participants || [],
@@ -85,8 +108,8 @@ export class SummarizerService {
       };
     } catch (error) {
       Logger.error('Failed to parse Claude response as JSON', error);
-      
-      // Fallback: crear un resumen básico
+
+      // Fallback: create a basic summary
       return {
         summary: responseText.substring(0, 500) + '...',
         participants: meetingData.participants.map(p => ({
@@ -106,27 +129,34 @@ export class SummarizerService {
   }
 
   /**
-   * Calcula la duración de la reunión
+   * Calculates meeting duration in human-readable format
+   * @param {string} startTime - ISO timestamp of meeting start
+   * @param {string} [endTime] - ISO timestamp of meeting end
+   * @returns {string} Formatted duration (e.g., "45 minutos", "1h 30min")
+   * @private
    */
   private calculateDuration(startTime: string, endTime?: string): string {
     if (!endTime) return 'Duración no disponible';
-    
+
     const start = new Date(startTime);
     const end = new Date(endTime);
     const diffMs = end.getTime() - start.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    
+
     if (diffMins < 60) {
       return `${diffMins} minutos`;
     }
-    
+
     const hours = Math.floor(diffMins / 60);
     const mins = diffMins % 60;
     return `${hours}h ${mins}min`;
   }
 
   /**
-   * Genera un resumen rápido (sin formato completo)
+   * Generates a quick, brief summary (maximum 3 lines)
+   * Useful for quick previews without full processing
+   * @param {MeetingData} meetingData - Meeting data to summarize
+   * @returns {Promise<string>} Brief text summary
    */
   async generateQuickSummary(meetingData: MeetingData): Promise<string> {
     try {
