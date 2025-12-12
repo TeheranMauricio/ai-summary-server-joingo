@@ -1,0 +1,210 @@
+import nodemailer from 'nodemailer';
+import { config } from '../config';
+import { Logger } from '../utils/logger';
+import { Summary, Participant } from '../types/meeting.types';
+
+export class EmailService {
+  private transporter: nodemailer.Transporter;
+
+  constructor() {
+    this.transporter = nodemailer.createTransport({
+      service: config.email.service,
+      auth: {
+        user: config.email.user,
+        pass: config.email.password
+      }
+    });
+  }
+
+  /**
+   * Envía el resumen de la reunión por email a todos los participantes
+   */
+  async sendSummaryEmail(participants: Participant[], summary: Summary): Promise<void> {
+    try {
+      const recipientEmails = participants.map(p => p.email).filter(email => email);
+      
+      if (recipientEmails.length === 0) {
+        Logger.warn('No recipient emails found, skipping email send');
+        return;
+      }
+
+      const htmlContent = this.buildEmailHTML(summary, participants);
+      
+      const mailOptions = {
+        from: {
+          name: 'JoinGo Meeting Assistant',
+          address: config.email.user
+        },
+        to: recipientEmails.join(', '),
+        subject: `📋 Resumen de Reunión - ${new Date(summary.generatedAt).toLocaleDateString('es-CO')}`,
+        html: htmlContent
+      };
+
+      Logger.info(`Sending summary email to: ${recipientEmails.join(', ')}`);
+      
+      const info = await this.transporter.sendMail(mailOptions);
+      
+      Logger.success(`Email sent successfully. Message ID: ${info.messageId}`);
+    } catch (error: any) {
+      Logger.error('Failed to send summary email', error);
+      throw new Error(`Email sending failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Construye el HTML del email
+   */
+  private buildEmailHTML(summary: Summary, participants: Participant[]): string {
+    const tasksList = summary.tasks && summary.tasks.length > 0
+      ? summary.tasks.map(task => `
+        <div style="background: #F3F4F6; padding: 12px; margin: 8px 0; border-radius: 8px; border-left: 4px solid #4F46E5;">
+          <strong style="color: #1F2937;">${task.description}</strong><br>
+          <span style="color: #6B7280; font-size: 14px;">
+            👤 Responsable: ${task.assignee}
+            ${task.deadline ? `<br>📅 Fecha límite: ${task.deadline}` : ''}
+          </span>
+        </div>
+      `).join('')
+      : '<p style="color: #6B7280;">No se identificaron tareas específicas en esta reunión.</p>';
+
+    const participantsList = summary.participants && summary.participants.length > 0
+      ? summary.participants.map(p => `
+        <li style="margin-bottom: 8px;">
+          <strong style="color: #1F2937;">${p.name}</strong>
+          <br>
+          <span style="color: #6B7280; font-size: 14px;">${p.contributions}</span>
+        </li>
+      `).join('')
+      : participants.map(p => `<li style="color: #6B7280;">${p.name}</li>`).join('');
+
+    const topicsList = summary.topics && summary.topics.length > 0
+      ? summary.topics.map(topic => `<li style="color: #374151; margin-bottom: 4px;">${topic}</li>`).join('')
+      : '<li style="color: #6B7280;">No se identificaron temas específicos</li>';
+
+    const nextStepsList = summary.nextSteps && summary.nextSteps.length > 0
+      ? summary.nextSteps.map(step => `<li style="color: #374151; margin-bottom: 4px;">${step}</li>`).join('')
+      : '<li style="color: #6B7280;">No se definieron próximos pasos</li>';
+
+    return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resumen de Reunión</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #F9FAFB;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+    
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, #667EEA 0%, #764BA2 100%); padding: 30px 20px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 28px; font-weight: 700;">
+        📋 Resumen de Reunión
+      </h1>
+      <p style="margin: 8px 0 0 0; color: rgba(255, 255, 255, 0.9); font-size: 14px;">
+        Generado por JoinGo AI Assistant
+      </p>
+    </div>
+
+    <!-- Content -->
+    <div style="padding: 30px 20px;">
+      
+      <!-- Meeting Info -->
+      <div style="background: #EEF2FF; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
+        <p style="margin: 0; color: #4F46E5; font-size: 14px; font-weight: 600;">
+          📅 ${new Date(summary.generatedAt).toLocaleString('es-CO', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}
+        </p>
+        ${summary.meetingDuration ? `
+        <p style="margin: 5px 0 0 0; color: #6366F1; font-size: 14px;">
+          ⏱️ Duración: ${summary.meetingDuration}
+        </p>
+        ` : ''}
+      </div>
+
+      <!-- Summary -->
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1F2937; font-size: 20px; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #E5E7EB;">
+          📝 Resumen General
+        </h2>
+        <p style="color: #374151; line-height: 1.6; margin: 0;">
+          ${summary.summary}
+        </p>
+      </div>
+
+      <!-- Topics -->
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1F2937; font-size: 20px; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #E5E7EB;">
+          🎯 Temas Principales
+        </h2>
+        <ul style="color: #374151; line-height: 1.8; margin: 0; padding-left: 20px;">
+          ${topicsList}
+        </ul>
+      </div>
+
+      <!-- Participants -->
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1F2937; font-size: 20px; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #E5E7EB;">
+          👥 Participantes
+        </h2>
+        <ul style="list-style: none; padding: 0; margin: 0;">
+          ${participantsList}
+        </ul>
+      </div>
+
+      <!-- Tasks -->
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1F2937; font-size: 20px; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #E5E7EB;">
+          ✅ Tareas y Compromisos
+        </h2>
+        ${tasksList}
+      </div>
+
+      <!-- Next Steps -->
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1F2937; font-size: 20px; margin: 0 0 12px 0; padding-bottom: 8px; border-bottom: 2px solid #E5E7EB;">
+          🚀 Próximos Pasos
+        </h2>
+        <ul style="color: #374151; line-height: 1.8; margin: 0; padding-left: 20px;">
+          ${nextStepsList}
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div style="background: #F9FAFB; padding: 20px; text-align: center; border-top: 1px solid #E5E7EB;">
+      <p style="margin: 0; color: #6B7280; font-size: 12px;">
+        Este resumen fue generado automáticamente por <strong style="color: #4F46E5;">JoinGo</strong>
+      </p>
+      <p style="margin: 8px 0 0 0; color: #9CA3AF; font-size: 11px;">
+        Powered by Claude AI | Universidad del Valle
+      </p>
+    </div>
+
+  </div>
+</body>
+</html>
+    `;
+  }
+
+  /**
+   * Verifica la conexión del servicio de email
+   */
+  async verifyConnection(): Promise<boolean> {
+    try {
+      await this.transporter.verify();
+      Logger.success('Email service connection verified');
+      return true;
+    } catch (error) {
+      Logger.error('Email service connection failed', error);
+      return false;
+    }
+  }
+}
